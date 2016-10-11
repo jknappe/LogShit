@@ -1,6 +1,6 @@
-# Log data from Campbel scientific weather station
-Program author: Jan Knappe
-Contact: [jan.knappe@tcd.ie](jan.knappe@tcd.ie)
+# Log data from Campbell scientific weather station
+Program author: Jan Knappe,
+Contact: [jan.knappe@tcd.ie](jan.knappe@tcd.ie),
 Logger type: CR1000 (Campbell Scientific)
 
 ## Connected devices
