@@ -21,7 +21,7 @@
   Const ScanRate1 = 1         'Time interval in seconds for Scan 01 (wind)
   Const ScanRate2 = 60        'Time interval in seconds for Scan 02 (temp, RH, radiation)
   Const ScanRate3 = 3600      'Time interval in seconds for Scan 03 (soil sensors, tipping buckets, rain) - needs to be >300
-  Const Num_E5_M1 = 48        'Number of EC5 probes connected to multiplexer 1
+  Const Num_E5_M1 = 48        'Number of  EC5 probes connected to multiplexer 1
   Const Num_E5_M2 = 48        'Number of EC5 probes connected to multiplexer 2
  'calibration constants
   Const T_case_m = 1          'Multiplier for thermocouple
@@ -29,14 +29,14 @@
   Const CS215out_m = 1        'Multiplier for T+RH sensor
   Const CS215out_b = 0        'Offset for T+RH sensor	
   Const Wind_Spe_m = 0.098    'Multiplier for wind speed
-  Const Wind_Spe_b = 0        'Offset for wind speed	
+  Const Wind_Spe_b = 0.1024   'Offset for wind speed	
   Const Wind_Dir_m = 355      'Multiplier for wind direction
   Const Wind_Dir_b = 0        'Offset for wind direction	
-  Const Rad_out_m = 76.34     'Multiplier for net radiometer
+  Const Rad_out_m = 75.76     'Multiplier for net radiometer
   Const Rad_out_b = 0         'Offset for net radiometer
   Const Pres_m = 0.240        'Multiplier for barometric pressure sensor
   Const Pres_b = 500          'Offset for barometric pressure sensor
-  Const Rain_m = 0.199        'Multiplier for tipping bucket rain gauge 
+  Const Rain_m = 0.201        'Multiplier for tipping bucket rain gauge 
   Const Rain_b = 0            'Offset for tipping bucket rain gauge
   'calculated constants
   Const Num_E5_tot = Num_E5_M1 + Num_E5_M2 'Total number of EC5 sensors

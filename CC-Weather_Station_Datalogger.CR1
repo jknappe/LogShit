@@ -29,10 +29,10 @@
   Const CS215out_m = 1        'Multiplier for T+RH sensor
   Const CS215out_b = 0        'Offset for T+RH sensor	
   Const Wind_Spe_m = 0.098    'Multiplier for wind speed
-  Const Wind_Spe_b = 0        'Offset for wind speed	
+  Const Wind_Spe_b = 0.1024   'Offset for wind speed	
   Const Wind_Dir_m = 355      'Multiplier for wind direction
   Const Wind_Dir_b = 0        'Offset for wind direction	
-  Const Rad_out_m = 76.34     'Multiplier for net radiometer
+  Const Rad_out_m = 70.92     'Multiplier for net radiometer
   Const Rad_out_b = 0         'Offset for net radiometer
   Const Pres_m = 0.240        'Multiplier for barometric pressure sensor
   Const Pres_b = 500          'Offset for barometric pressure sensor
