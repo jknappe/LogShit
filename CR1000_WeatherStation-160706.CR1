@@ -1,0 +1,284 @@
+'-----------------------------------------------
+' Preamble
+'-----------------------------------------------
+
+'Program name: CR1000_WeatherStation-160706
+'based on: CR1000_KilmallockLogger-160122-v2.1
+'Program version: 1.2
+'Date: 06 July 2016
+'Logger type: CR1000
+
+'Logger program to measure 
+  'Battery Voltage (V_batt) 
+  'Panel Temperature (T_panel)
+  'Air Temperature (T_air as CS215out(1)) on CS215 
+  'Relative Humidity (RH as CS215out(2)) on CS215 
+  'Barometric Pressure (Pres) on CS106
+  'Rainfall (Rain) on ARG100
+  'Wind Speed (Wind_Spe) on 05103-5
+  'Wind Direction (Wind_Dir) on 05103-5
+  'Net Radiation (Rad_Net) on NR-2 Lite
+  'Solar Radiation (CMP_1) on CMP6_1
+  'Solar Radiation (CMP_2) on CMP6_2
+ 
+'Program author: Jan Knappe
+'Contact: jan.knappe@tcd.ie
+	
+'-----------------------------------------------
+' Sensor wiring
+'-----------------------------------------------
+
+'Battery		 Solar Panel (via connector 5)
+'Solar  		 Red
+'G           Black
+
+'CR1000			 CS106 Barometric pressure sensor	(internal)
+'SE2  		   Blue
+'AG				   Yellow
+'G			  	 Green/Yellow
+'G			  	 Black
+'12V			   Red
+'C1			  	 Green  
+
+'CR1000      CS215 T+RH sensor (via connector 1)
+'G           Yellow
+'G           Black
+'12V         Red
+'C7          Green
+'SDI-12 address: 0
+  
+'CR1000      05103-5 Wind monitor (via connector 3)
+'SE1         Green
+'G           Black
+'G           Green/Yellow
+'G           White
+'VX1         Blue 
+'P1          Red 
+ 
+'CR1000      NR-2 Lite Net readiometer (via connector 2)
+'2H          Red
+'2L          Blue
+'2L          Jumper to AG
+'G           Green/Yellow
+ 
+'CR1000      ARG100 Rain gauge (via connector 4)
+'G           Green/Yellow
+'G           White
+'P2          Black
+
+'CR1000      CMP6 (1 of 2)
+'5H          Red
+'5L          Blue
+'G           Black
+
+'CR1000      CMP6 (2 of 2)
+'6H          Red
+'6L          Blue
+'G           Black
+
+'-----------------------------------------------
+' Declare Variables and Units
+'-----------------------------------------------
+
+'declare constants
+  'site specific constants
+  Const Longi = 6.361867      'Longitude of site (for ETsz PM)
+  Const Lati = 53.862641      'Latitude of site (for ETsz PM)
+  Const Alti = 40             'Altitude of site (for ETsz PM)
+  Const WindHeight = 2        'Height of wind monitor (for ETsz PM)
+  'logger specific constants
+  Const ScanRate1 = 1         'Time interval in seconds for Scan 01 (wind)
+  Const ScanRate2 = 60        'Time interval in seconds for Scan 02 (temp, RH, radiation)
+  Const ScanRate3 = 3600      'Time interval in seconds for Scan 03 (rain) - needs to be >300
+ 'calibration constants
+  Const CS215out_m = 1        'Multiplier for T+RH sensor
+  Const CS215out_b = 0        'Offset for T+RH sensor	
+  Const Wind_Spe_m = 0.098    'Multiplier for wind speed
+  Const Wind_Spe_b = 0        'Offset for wind speed	
+  Const Wind_Dir_m = 355      'Multiplier for wind direction
+  Const Wind_Dir_b = 0        'Offset for wind direction	
+  Const Rad_out_m = 1000/12.7 'Multiplier for net radiometer
+  Const Rad_out_b = 0         'Offset for net radiometer
+  Const Pres_m = 0.240        'Multiplier for barometric pressure sensor
+  Const Pres_b = 500          'Offset for barometric pressure sensor
+  Const Rain_m = 0.2          'Multiplier for tipping bucket rain gauge 
+  Const Rain_b = 0            'Offset for tipping bucket rain gauge
+  Const CMP6_1_m = 1000/13.46 'Multiplier for CMP6_1
+  Const CMP6_1_b = 0          'Offset for CMP6_1
+  Const CMP6_2_m = 1000/12.90 'Multiplier for CMP6_2
+  Const CMP6_2_b = 0          'Offset for CMP6_1
+	
+'declare variables
+  'measured properties
+  Public V_batt        'Battery voltage
+  Public T_panel       'Panel temperature
+  Public CS215out(2)   'Array for air temperture and RH
+  Public Pres          'Barometric pressure                      
+  Public Rain          'Rainfall 
+  Public Wind_Spe      'Wind speed 
+  Public Wind_Dir      'Wind direction
+  Public Rad_out       'Radiometer output
+  Public CMP6_1        'CMP6 Pryranometer output (1 of 2)
+  Public CMP6_2        'CMP6 Pryranometer output (2 of 2)
+  'calculated properties
+  Public Rad_Net       'Wind corrected net radiation
+  Public Rad_Sol       'Solar radioation (converted from flux output Rad_Net)
+  Public N_wind        'number of wind measurements per log interval  
+  Public N_met         'number of meteorological measurements per log interval
+  Public WindValue(3)
+  Public Wind_Gust
+  'counters
+  Dim i                'loop counter
+  Dim Count_wind       'wind measurement per log interval counter
+  Dim Count_met        'meteorological measurement per log interval counter
+  'Flags
+  Dim Flag_Gust 
+        
+'declare aliases for data table
+  Alias CS215out(1) = T_air   'Air temperature
+  Alias CS215out(2) = RH      'Relative humidity (RH)
+   	
+'declare units
+  Units V_batt = V
+  Units T_panel = degC
+  Units T_air = degC
+  Units RH = %
+  Units Pres = mbar
+  Units Wind_Spe = m/s
+  Units Wind_Dir = deg
+  Units Wind_Gust = m/s
+  Units Rad_Net = W/m2
+  Units Rad_Sol = MJ/m2/h
+  Units CMP6_1 = W/m2
+  Units CMP6_2 = W/m2
+		
+'-----------------------------------------------
+' Create data table
+'-----------------------------------------------
+
+DataTable(Louth1,1,20000)	'20,000 rows, i.e. approx. 26 months hourly data
+  TableFile("CRD:Louth1_",64,59,0,28,Day,0,0)
+  DataInterval(0,ScanRate3,Sec,0)
+  
+  Minimum(1,V_batt,FP2,False,False) 
+  Sample(1,T_panel,FP2) 
+  Average(1,T_air,FP2,False) 
+    Minimum(1,T_air,FP2,False,False) 
+    Maximum(1,T_air,FP2,False,False) 
+  Average(1,RH,FP2,False) 
+    Minimum(1,RH,FP2,False,False) 
+    Maximum(1,RH,FP2,False,False) 
+  Sample(1,N_met,FP2)  
+  Sample(1,Pres,FP2) 
+  Totalize(1,Rain,FP2,False)
+  WindVector(1,Wind_Spe,Wind_Dir,FP2,False,0,0,2)
+    FieldNames("Wind_Spe_Avg,Wind_Spe_SD,Wind_Dir_Avg,Wind_Dir_SD") 
+    Maximum(1,Wind_Gust,FP2,False,False)
+    Sample(1,N_wind,FP2)  
+  Average(1,Rad_Net,FP2,False) 
+  Average(1,Rad_Sol,FP2,False) 
+  ETsz(T_air,RH,Wind_Spe,Rad_Sol,Longi,Lati,Alti,WindHeight,0,FP2,0)
+    FieldNames("ETsz,RSo") 
+  Average(1,CMP6_1,FP2,False)
+    StdDev(1,CMP6_1,FP2,False)
+  Average(1,CMP6_2,FP2,False)
+    StdDev(1,CMP6_2,FP2,False)
+
+EndTable
+
+'-----------------------------------------------
+' Main Program
+'-----------------------------------------------
+
+SequentialMode
+	
+BeginProg
+  Scan(ScanRate1,Sec,1,0)
+	
+  'Measurements every second
+  '-----------------------------------
+  
+  	'Count number of measurements per log interval
+  	Count_wind = Count_wind + 1
+	  N_wind = Count_wind
+	  
+    'Rainfall on rain gauge ARG100 via connector 4
+    PulseCount(Rain,1,2,2,0,Rain_m,Rain_b)
+	  	
+	  'Wind speed on 05103-5 wind monitor via connector 2
+	  PulseCount(Wind_Spe,1,1,1,1,Wind_Spe_m,Wind_Spe_b)	
+	  
+	  'Wind direction on 05103-5 wind monitor via connector 2
+	  BrHalf(Wind_Dir,1,mV2500,1,Vx1,1,2500,True,0,_50Hz,Wind_Dir_m,Wind_Dir_b)
+	    If Wind_Dir >= 360 OR Wind_Dir < 0 Then Wind_Dir = 0
+	  
+    'Calculate wind gust value as highest 3-second-average speed 
+    'withing logging interval
+    Flag_Gust = (Count_wind MOD 3) + 1 '1,2 or 3
+      WindValue(Flag_Gust) = Wind_Spe  'save last 3 measured Wind_Spe
+      'start averaging after first 3 measurements
+      If Count_wind >= 3 Then Wind_Gust = (WindValue(1)+WindValue(2)+WindValue(3))/3 
+          
+  'Measurements every minute 
+  '-----------------------------------
+  
+    If TimeIntoInterval(0,ScanRate2,Sec) Then		
+    
+      'Count number of measurements per log interval
+  	  Count_met = Count_met + 1
+	    N_met = Count_met
+
+      'Air temperature and RH on sensor CS215 via connector 1
+      SDI12Recorder(CS215out(),7,"0","M!",CS215out_m,CS215out_b)	
+	  
+	    'Net radiation on NR-2 Lite radiometer via connector 2 (wind corrected)
+	     VoltDiff(Rad_out,1,mV25,2,True,0,_50Hz,Rad_out_m,Rad_out_b)
+		     If Wind_Spe >= 5 Then 
+		       Rad_Net = Rad_out * (1 + 0.021286 * (Rad_out - 5))  
+		     Else 
+		       Rad_Net = Rad_out
+		     EndIf
+		  
+	    'Conversion of radiation flux into solar radiation (W/m2 to MJ/m2) for PM
+       Rad_Sol = (Rad_Net * 3600) /1000000
+       
+      'Solar Radiation on CMP6 (1 of 2)
+       VoltDiff(CMP6_1,1,mV25C,5,True ,10000,_50Hz,CMP6_1_m,CMP6_1_b)
+       
+      'Solar Radiation on CMP6 (2 of 2)
+       VoltDiff(CMP6_2,1,mV25C,6,True ,10000,_50Hz,CMP6_2_m,CMP6_2_b)
+	  
+    If TimeIntoInterval(0,ScanRate3,Sec) Then Count_met = 0        
+
+    EndIf 
+	    	
+  'Measurements every hour
+  '-----------------------------------
+  
+    'switch on pressure sensor five minutes before the measurement
+    If TimeIntoInterval(ScanRate3 - 300,ScanRate3,Sec) Then PortSet(1,1)
+  
+    If TimeIntoInterval(0,ScanRate3,Sec) Then	
+    
+      'reset counters and wind values  
+	      Count_wind = 0
+	      For i = 1 To 3
+	        WindValue(i) = 0
+	      Next	
+	 
+      'Datalogger battery voltage (inbuilt)
+	    Battery(V_batt)
+	
+	    'Panel temperature (inbuilt)
+	    PanelTemp(T_panel,_50Hz)
+  
+      'Barometric pressure on sensor CS106 (turn off afterwards)
+        VoltSe(Pres,1,mV2500,2,1,0,_50Hz,Pres_m,Pres_b)
+	    	PortSet(1,0)
+	    	   
+    EndIf
+
+CallTable(Louth1)
+		 
+NextScan
+EndProg
