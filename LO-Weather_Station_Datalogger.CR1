@@ -20,7 +20,7 @@
   'Net Radiation (Rad_Net) on NR-2 Lite
   'Solar Radiation (CMP_1) on CMP6_1
   'Solar Radiation (CMP_2) on CMP6_2
-  'Tipping Bucket on C6 (STE)
+  'Tipping Buckets (3x) on C4, C5, C6 
  
 'Program author: Jan Knappe
 'Contact: jan.knappe@tcd.ie
@@ -77,15 +77,15 @@
 '6L          Blue
 'G           Black
 
-'CR1000      Tipping Bucket (1/3)
+'CR1000      Tipping Bucket (1/3) PE
 'C4          Black
 '5V          Black
 
-'CR1000      Tipping Bucket (2/3)
+'CR1000      Tipping Bucket (2/3) E1
 'C5          Black
 '5V          Black
 
-'CR1000      Tipping Bucket (3/3)
+'CR1000      Tipping Bucket (3/3) E2
 'C6          Black
 '5V          Black
 
@@ -176,7 +176,7 @@
 '-----------------------------------------------
 
 DataTable(Louth_TENMIN,1,20000)	'20,000 rows, i.e. approx. 26 months hourly data
-  TableFile("CRD:Louth_TENMIN_",64-1,0,28,Day,0,0)
+  TableFile("CRD:Louth_TENMIN_",64,-1,0,28,Day,0,0)
   DataInterval(0,600,Sec,0)
   
   Totalize(1,Rain,FP2,False)
@@ -240,9 +240,9 @@ BeginProg
     PulseCount(Rain,1,2,2,0,Rain_m,Rain_b)
       
 	  'Primary and secondary effluent tipping buckets
-    PulseCount(Flow_E1_tip,1,14,2,0,1,0)
-    PulseCount(Flow_E2_tip,1,15,2,0,1,0)
-    PulseCount(Flow_PE_tip,1,16,2,0,1,0)
+    PulseCount(Flow_PE_tip,1,14,2,0,1,0)
+    PulseCount(Flow_E1_tip,1,15,2,0,1,0)
+    PulseCount(Flow_E2_tip,1,16,2,0,1,0)
 	  	
 	  'Wind speed on 05103-5 wind monitor via connector 2
 	  PulseCount(Wind_Spe,1,1,1,1,Wind_Spe_m,Wind_Spe_b)	
