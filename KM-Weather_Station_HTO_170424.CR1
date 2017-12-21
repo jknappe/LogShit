@@ -1,0 +1,370 @@
+'-----------------------------------------------
+' Preamble
+'-----------------------------------------------
+
+'Date: 24/04/2017
+'Logger type: CR1000 
+'Station: KM - Kilmallock
+'Program author: Jan Knappe
+'Contact: jan.knappe@tcd.ie
+
+'-----------------------------------------------
+' Declare Variables and Units
+'-----------------------------------------------
+
+'declare constants
+  'site specific constants
+  Const Longi = 8.570510      'Longitude of site (for ETsz PM)
+  Const Lati = 52.395733      'Latitude of site (for ETsz PM)
+  Const Alti = 80             'Altitude of site (for ETsz PM)
+  Const WindHeight = 2        'Height of wind monitor (for ETsz PM)
+  'logger specific constants
+  Const ScanRate1 = 1         'Time interval in seconds for Scan 01 (wind)
+  Const ScanRate2 = 60        'Time interval in seconds for Scan 02 (temp, RH, radiation)
+  Const ScanRate3 = 3600      'Time interval in seconds for Scan 03 (soil sensors, tipping buckets, rain) - needs to be >300
+  'Const LogRate = 60          'Time interval for logging in minutes (multiple of ScanRate)	  
+  Const Num_E5_M1 = 48        'Number of EC5 probes connected to multiplexer 1
+  Const Num_E5_M2 = 33        'Number of EC5 probes connected to multiplexer 2
+ 'calibration constants
+  Const T_case_m = 1          'Multiplier for thermocouple
+	Const T_case_b = 0          'Offset for thermocouple	
+  Const CS215out_m = 1        'Multiplier for T+RH sensor
+  Const CS215out_b = 0        'Offset for T+RH sensor	
+  Const Wind_Spe_m = 0.098    'Multiplier for wind speed
+  Const Wind_Spe_b = 0        'Offset for wind speed	
+  Const Wind_Dir_m = 355      'Multiplier for wind direction
+  Const Wind_Dir_b = 0        'Offset for wind direction	
+  Const Rad_out_m = 76.34     'Multiplier for net radiometer
+  Const Rad_out_b = 0         'Offset for net radiometer
+  Const Pres_m = 0.240        'Multiplier for barometric pressure sensor
+  Const Pres_b = 500          'Offset for barometric pressure sensor
+  Const Rain_m = 0.2          'Multiplier for tipping bucket rain gauge 
+  Const Rain_b = 0            'Offset for tipping bucket rain gauge
+  'calculated constants
+  Const Num_E5_tot = Num_E5_M1 + Num_E5_M2 'Total number of EC5 sensors
+  Const Num_PortM1 = Num_E5_M1 / 3 '# of used port triplets on multiplexer 1 
+  Const Num_PortM2 = Num_E5_M2 / 3 '# of used port triplets on multiplexer 2 
+  	
+'declare variables
+  'measured properties
+  Public V_batt        'Battery voltage
+  Public T_panel       'Panel temperature
+  Public T_case        'Case temperature
+  Public CS215out(2)   'Array for air temperture and RH
+  Public Pres          'Barometric pressure                      
+  Public Rain          'Rainfall 
+  Public Wind_Spe      'Wind speed
+  Public Wind_Dir      'Wind direction
+  Public Rad_out       'Radiometer output
+  Public Flow_PE_tip   'Flow in primary effluent tipping bucket (# of tips)	  
+  Public Flow_SE_tip   'Flow in secondary effluent tipping bucket (# of tips)    
+  Public E5(Num_E5_tot)'Array of all EC5 measurements (raw signal)  
+  Public G1(3)         'output string from sensor G1 (e,T,EC)
+  Public G2(3)         'output string from sensor G2 (e,T,EC)
+  Public G3(3)         'output string from sensor G3 (e,T,EC)
+  Public G4(3)         'output string from sensor G4 (e,T,EC) 
+  'calculated properties
+  Public Rad_Net       'Wind corrected net radiation
+  Public Rad_Sol       'Solar radioation (converted from flux output Rad_Net)
+  Public Flow_PE_L     'Flow in primary effluent tipping bucket [L]
+  Public Flow_SE_L     'Flow in primary effluent tipping bucket [L]  
+  Public N_wind        'number of wind measurements per log interval  
+  Public N_met         'number of meteorological measurements per log interval
+  Public WindValue(3)
+  Public Wind_Gust
+  'counters
+  Dim i                'loop counter
+  Dim Count_wind       'wind measurement per log interval counter
+  Dim Count_met        'meteorological measurement per log interval counter
+  'Flags
+  Dim Flag_Gust 
+        
+'declare aliases for data table
+  Alias CS215out(1) = T_air  'Air temperature
+  Alias CS215out(2) = RH     'Relative humidity (RH)
+  Alias G1(1) = G1_e         'dielectric permittivity
+  Alias G2(1) = G2_e
+  Alias G3(1) = G3_e
+  Alias G4(1) = G4_e
+  Alias G1(2) = G1_T         'soil temperature
+  Alias G2(2) = G2_T
+  Alias G3(2) = G3_T
+  Alias G4(2) = G4_T
+  Alias G1(3) = G1_EC        'soil electrical conductivity
+  Alias G2(3) = G2_EC
+  Alias G3(3) = G3_EC
+  Alias G4(3) = G4_EC
+   	
+'declare units
+  Units V_batt = V
+  Units T_panel = degC
+  Units T_case = degC
+  Units T_air = degC
+  Units RH = %
+  Units Pres = mbar
+  Units Wind_Spe = m/s
+  Units Wind_Dir = deg
+  Units Wind_Gust = m/s
+  Units Rad_Net = W/m2
+  Units Flow_PE_tip = tips
+  Units Flow_SE_tip = tips
+  Units Rad_Sol = MJ/m2/h
+   
+  Units E5() = V
+    
+  Units G1(1) = e     'dielectric permittivity
+  Units G2(1) = e
+  Units G3(1) = e
+  Units G4(1) = e
+  Units G1(2) = degC  'soil temperature
+  Units G2(2) = degC
+  Units G3(2) = degC
+  Units G4(2) = degC
+  Units G1(3) = uS/m  'soil electrical conductivity
+  Units G2(3) = uS/m
+  Units G3(3) = uS/m
+  Units G4(3) = uS/m
+		
+'-----------------------------------------------
+' Create data table
+'-----------------------------------------------
+
+DataTable(KM_Data_ONEMIN,1,10000)	
+  TableFile("CRD:KM_Data_ONEMIN_",64,-1,0,1,Day,0,0)
+  DataInterval(0,60,Sec,0)
+  
+  Totalize(1,Rain,FP2,False)
+  Totalize(1,Flow_PE_tip,FP2,False) 
+  Totalize(1,Flow_SE_tip,FP2,False)
+  Sample(1,G1(1),FP2)         
+  Sample(1,G2(1),FP2)
+  Sample(1,G3(1),FP2)
+  Sample(1,G4(1),FP2)
+  Sample(1,G1(3),FP2)         
+  Sample(1,G2(3),FP2)
+  Sample(1,G3(3),FP2)
+  Sample(1,G4(3),FP2)
+
+EndTable
+
+DataTable(KM_Data_TENMIN,1,10000)	
+  TableFile("CRD:KM_Data_TENMIN_",64,-1,0,1,Day,0,0)
+  DataInterval(0,600,Sec,0)
+  
+  Sample(1,T_air,FP2,False) 
+  Totalize(1,Rain,FP2,False)
+  Totalize(1,Flow_PE_tip,FP2,False) 
+  Totalize(1,Flow_SE_tip,FP2,False) 
+  WindVector(1,Wind_Spe,Wind_Dir,FP2,False,0,0,2)
+    FieldNames("Wind_Spe_Avg,Wind_Spe_SD,Wind_Dir_Avg,Wind_Dir_SD") 
+  'Sample(Num_E5_tot,E5(),FP2)
+  Sample(1,G1(1),FP2)         
+  Sample(1,G2(1),FP2)
+  Sample(1,G3(1),FP2)
+  Sample(1,G4(1),FP2)
+  Sample(1,G1(2),FP2)         
+  Sample(1,G2(2),FP2)
+  Sample(1,G3(2),FP2)
+  Sample(1,G4(2),FP2)
+  Sample(1,G1(3),FP2)         
+  Sample(1,G2(3),FP2)
+  Sample(1,G3(3),FP2)
+  Sample(1,G4(3),FP2)
+
+EndTable
+
+DataTable(KM_Data_HOUR,1,10000)	'10,000 rows, i.e. approx. 13 months hourly data  
+  TableFile("CRD:KM_Data_HOUR_",64,-1,0,7,Day,0,0)
+  DataInterval(0,ScanRate3,Sec,0)
+  
+  Minimum(1,V_batt,FP2,False,False) 
+  Sample(1,T_panel,FP2) 
+  Sample(1,T_case,FP2) 
+  Average(1,T_air,FP2,False) 
+    Minimum(1,T_air,FP2,False,False) 
+    Maximum(1,T_air,FP2,False,False) 
+  Average(1,RH,FP2,False) 
+    Minimum(1,RH,FP2,False,False) 
+    Maximum(1,RH,FP2,False,False) 
+  Sample(1,N_met,FP2)  
+  Sample(1,Pres,FP2) 
+  Totalize(1,Rain,FP2,False)
+  WindVector(1,Wind_Spe,Wind_Dir,FP2,False,0,0,2)
+    FieldNames("Wind_Spe_Avg,Wind_Spe_SD,Wind_Dir_Avg,Wind_Dir_SD") 
+    Maximum(1,Wind_Gust,FP2,False,False)
+    Sample(1,N_wind,FP2)  
+  Average(1,Rad_Net,FP2,False) 
+  Average(1,Rad_Sol,FP2,False) 
+  ETsz(T_air,RH,Wind_Spe,Rad_Sol,Longi,Lati,Alti,WindHeight,0,FP2,0)
+    FieldNames("ETsz,RSo") 
+  Totalize(1,Flow_PE_tip,FP2,False) 
+  Totalize(1,Flow_SE_tip,FP2,False) 
+  Sample(Num_E5_tot,E5(),FP2)
+  Sample(1,G1(1),FP2)         
+  Sample(1,G2(1),FP2)
+  Sample(1,G3(1),FP2)
+  Sample(1,G4(1),FP2)
+  Sample(1,G1(2),FP2)         
+  Sample(1,G2(2),FP2)
+  Sample(1,G3(2),FP2)
+  Sample(1,G4(2),FP2)
+  Sample(1,G1(3),FP2)         
+  Sample(1,G2(3),FP2)
+  Sample(1,G3(3),FP2)
+  Sample(1,G4(3),FP2)
+  
+EndTable
+
+
+'-----------------------------------------------
+' Main Program
+'-----------------------------------------------
+
+SequentialMode
+	
+BeginProg
+  Scan(ScanRate1,Sec,1,0)
+	
+  'Measurements every second
+  '-----------------------------------
+  
+  	'Count number of measurements per log interval
+  	Count_wind = Count_wind + 1
+	  N_wind = Count_wind
+	  
+    'Rainfall on rain gauge ARG100 via connector 4
+    PulseCount(Rain,1,2,2,0,Rain_m,Rain_b)
+      
+	  'Primary and secondary effluent tipping buckets
+    PulseCount(Flow_PE_tip,1,16,2,0,1,0)
+    PulseCount(Flow_SE_tip,1,18,2,0,1,0)
+	  	
+	  'Wind speed on 05103-5 wind monitor via connector 2
+	  PulseCount(Wind_Spe,1,1,1,1,Wind_Spe_m,Wind_Spe_b)	
+	  
+	  'Wind direction on 05103-5 wind monitor via connector 2
+	  BrHalf(Wind_Dir,1,mV2500,8,Vx2,1,2500,True,0,_50Hz,Wind_Dir_m,Wind_Dir_b)
+	    If Wind_Dir >= 360 OR Wind_Dir < 0 Then Wind_Dir = 0
+	  
+    'Calculate wind gust value as highest 3-second-average speed 
+    'withing logging interval
+    Flag_Gust = (Count_wind MOD 3) + 1 '1,2 or 3
+      WindValue(Flag_Gust) = Wind_Spe  'save last 3 measured Wind_Spe
+      'start averaging after first 3 measurements
+      If Count_wind >= 3 Then Wind_Gust = (WindValue(1)+WindValue(2)+WindValue(3))/3 
+          
+  'Measurements every minute 
+  '-----------------------------------
+  
+    If TimeIntoInterval(0,ScanRate2,Sec) Then		
+    
+      'Count number of measurements per log interval
+  	  Count_met = Count_met + 1
+	    N_met = Count_met
+
+      'Air temperature and RH on sensor CS215 via connector 1
+      SDI12Recorder(CS215out(),7,"9","M!",CS215out_m,CS215out_b)	
+	  
+	    'Net radiation on NR-2 Lite radiometer via connector 3 (wind corrected)
+	     VoltDiff(Rad_out,1,mV25,5,True,0,_50Hz,Rad_out_m,Rad_out_b)
+		     If Wind_Spe >= 5 Then 
+		       Rad_Net = Rad_out * (1 + 0.021286 * (Rad_out - 5))  
+		     Else 
+		       Rad_Net = Rad_out
+		     EndIf
+		  
+	    'Conversion of radiation flux into solar radiation (W/m2 to MJ/m2) for PM
+       Rad_Sol = (Rad_Net * 3600) /1000000
+	     
+     'e, T, EC on GS3 sensors
+     PortSet(9,1)  'port 9 is SW12V
+       Delay(0,1000,mSec)  'wait for sensor startup
+       'Measure e+EC+T from sensor G01 on port C5   
+         SDI12Recorder(G1(),5,"1","M!",1,0)  'sensor on port C5 with address 1
+       'Measure e+EC+T from sensor G02 on port C5   
+         SDI12Recorder(G2(),5,"2","M!",1,0)  'sensor on port C5 with address 2
+       'Measure e+EC+T from sensor G03 on port C5   
+         SDI12Recorder(G3(),5,"3","M!",1,0)  'sensor on port C5 with address 3
+       'Measure e+EC+T from sensor G04 on port C5   
+         SDI12Recorder(G4(),5,"4","M!",1,0)  'sensor on port C5 with address 4
+	     'Turn Off sensor G04 
+       PortSet(9,0)
+       Delay(0,150,mSec)    
+
+    EndIf 
+	    	
+  'Measurements every hour
+  '-----------------------------------
+  
+    'switch on pressure sensor five minutes before the measurement
+    If TimeIntoInterval(ScanRate3 - 300,ScanRate3,Sec) Then PortSet(4,1)
+  
+    If TimeIntoInterval(0,ScanRate3,Sec) Then	
+    
+      'reset counters and wind values  
+        Count_met = 0
+	      Count_wind = 0
+	      For i = 1 To 3
+	        WindValue(i) = 0
+	      Next	
+	 
+      'Datalogger battery voltage (inbuilt)
+	    Battery(V_batt)
+	
+	    'Panel temperature (inbuilt)
+	    PanelTemp(T_panel,_50Hz)
+	
+	    'Case temperatur on thermocouple type T
+	    TCDiff(T_case,1,mV2_5C,8,TypeT,T_panel,True,0,_50Hz,T_case_m,T_case_b)
+  
+      'Barometric pressure on sensor CS106 (turn off afterwards)
+        VoltSe(Pres,1,mV2500,7,1,0,_50Hz,Pres_m,Pres_b)
+	    	PortSet(4,0)
+	    	
+	    'VWC on EC5 sensors	on multiplexer 1
+      PortSet(2,1)
+      Delay(0,150,mSec)  
+        i=1
+        SubScan(0,mSec,Num_PortM1)
+          PulsePort(1,10000)
+          BrHalf(E5(i),3,mV2500,1,1,3,2500,False,10000,_50Hz,1,0) 
+          i=i+3
+        NextSubScan     
+      PortSet(2,0)
+      Delay(0,150,mSec)
+  
+      'VWC on EC5 sensors	on multiplexer 2
+      PortSet(3,1)
+      Delay(0,150,mSec)  
+        i=1+Num_E5_M1
+        SubScan(0,mSec,Num_PortM2)
+          PulsePort(1,10000)
+          BrHalf(E5(i),3,mV2500,4,1,3,2500,False,10000,_50Hz,1,0) 
+          i=i+3
+        NextSubScan     
+      PortSet(3,0)
+      Delay(0,150,mSec)
+   
+     'e, T, EC on GS3 sensors
+     PortSet(9,1)  'port 9 is SW12V
+       Delay(0,1000,mSec)  'wait for sensor startup
+       'Measure e+EC+T from sensor G01 on port C5   
+         SDI12Recorder(G1(),5,"1","M!",1,0)  'sensor on port C5 with address 1
+       'Measure e+EC+T from sensor G02 on port C5   
+         SDI12Recorder(G2(),5,"2","M!",1,0)  'sensor on port C5 with address 2
+       'Measure e+EC+T from sensor G03 on port C5   
+         SDI12Recorder(G3(),5,"3","M!",1,0)  'sensor on port C5 with address 3
+       'Measure e+EC+T from sensor G04 on port C5   
+         SDI12Recorder(G4(),5,"4","M!",1,0)  'sensor on port C5 with address 4
+	     'Turn Off sensor G04 
+       PortSet(9,0)
+       Delay(0,150,mSec)
+   
+  EndIf
+
+CallTable(KM_Data_ONEMIN)
+CallTable(KM_Data_TENMIN)
+CallTable(KM_Data_HOUR)
+
+NextScan
+EndProg
